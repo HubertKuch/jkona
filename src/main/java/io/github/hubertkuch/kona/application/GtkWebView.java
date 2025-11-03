@@ -8,14 +8,18 @@ public class GtkWebView implements AutoCloseable {
     private Arena arena;
     private Linker linker;
     private SymbolLookup webkitLib;
+    private SymbolLookup gobjectLib;
 
     private MethodHandle webkitWebViewNew;
     private MethodHandle webkitWebViewLoadUri;
     private MethodHandle webkitWebViewEvaluateJavascript;
+    private MethodHandle webkitWebViewGetSettings;
+    private MethodHandle gObjectSet;
 
     public static boolean isSupported() {
         try (Arena checkArena = Arena.ofConfined()) {
             SymbolLookup.libraryLookup("libwebkit2gtk-4.0.so", checkArena);
+            SymbolLookup.libraryLookup("libgobject-2.0.so", checkArena);
             return true;
         } catch (Throwable e) {
             return false;
@@ -28,28 +32,17 @@ public class GtkWebView implements AutoCloseable {
             this.linker = Linker.nativeLinker();
 
             this.webkitLib = SymbolLookup.libraryLookup("libwebkit2gtk-4.0.so", this.arena);
+            this.gobjectLib = SymbolLookup.libraryLookup("libgobject-2.0.so", this.arena);
 
-            webkitWebViewNew = linker.downcallHandle(
-                    webkitLib.find("webkit_web_view_new").get(),
-                    FunctionDescriptor.of(ValueLayout.ADDRESS)
-            );
+            webkitWebViewNew = linker.downcallHandle(webkitLib
+                    .find("webkit_web_view_new")
+                    .get(), FunctionDescriptor.of(ValueLayout.ADDRESS));
 
-            webkitWebViewLoadUri = linker.downcallHandle(
-                    webkitLib.find("webkit_web_view_load_uri").get(),
-                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-            );
+            webkitWebViewLoadUri = linker.downcallHandle(webkitLib
+                    .find("webkit_web_view_load_uri")
+                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
 
-            // C: void webkit_web_view_evaluate_javascript(
-            //        WebKitWebView* web_view,
-            //        const gchar* script,
-            //        gssize length,
-            //        const gchar* world_name,
-            //        const gchar* source_uri,
-            //        GAsyncReadyCallback callback,
-            //        gpointer user_data
-            //    );
-            FunctionDescriptor evalDescriptor = FunctionDescriptor.ofVoid(
-                    ValueLayout.ADDRESS,    // web_view
+            FunctionDescriptor evalDescriptor = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS,    // web_view
                     ValueLayout.ADDRESS,    // script
                     ValueLayout.JAVA_LONG,  // length
                     ValueLayout.ADDRESS,    // world_name
@@ -61,6 +54,18 @@ public class GtkWebView implements AutoCloseable {
             this.webkitWebViewEvaluateJavascript = linker.downcallHandle(webkitLib
                     .find("webkit_web_view_evaluate_javascript")
                     .get(), evalDescriptor);
+
+            this.webkitWebViewGetSettings = linker.downcallHandle(webkitLib
+                    .find("webkit_web_view_get_settings")
+                    .get(), FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+
+            this.gObjectSet = linker.downcallHandle(gobjectLib
+                    .find("g_object_set")
+                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS,    // object
+                    ValueLayout.ADDRESS,    // property_name
+                    ValueLayout.JAVA_BOOLEAN, // value
+                    ValueLayout.ADDRESS     // NULL terminator
+            ));
 
             return true;
         } catch (Throwable e) {
@@ -80,15 +85,7 @@ public class GtkWebView implements AutoCloseable {
             MemorySegment webView = MemorySegment.ofAddress(webViewHandle);
             MemorySegment cScript = this.arena.allocateFrom(script);
 
-            webkitWebViewEvaluateJavascript.invokeExact(
-                    webView,
-                    cScript,
-                    -1L,                // length (-1 means null-terminated)
-                    MemorySegment.NULL, // world_name
-                    MemorySegment.NULL, // source_uri
-                    MemorySegment.NULL, // callback
-                    MemorySegment.NULL  // user_data
-            );
+            webkitWebViewEvaluateJavascript.invokeExact(webView, cScript, - 1L, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL);
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -96,8 +93,13 @@ public class GtkWebView implements AutoCloseable {
 
     public long createWebViewWidget() {
         try {
-            MemorySegment webViewHandle = (MemorySegment) webkitWebViewNew.invokeExact();
-            return webViewHandle.address();
+            MemorySegment webView = (MemorySegment) webkitWebViewNew.invokeExact();
+
+            MemorySegment settings = (MemorySegment) webkitWebViewGetSettings.invokeExact(webView);
+            MemorySegment propName = this.arena.allocateFrom("enable-developer-extras");
+            gObjectSet.invokeExact(settings, propName, true, MemorySegment.NULL);
+
+            return webView.address();
         } catch (Throwable e) {
             e.printStackTrace();
             return 0L;

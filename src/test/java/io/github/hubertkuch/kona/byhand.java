@@ -36,8 +36,8 @@ public class byhand {
                                 """
                     document.body.style.backgroundColor = '#2a2a2a';
                     document.body.style.color = 'white';
-                    document.innerHTML = "<h1>test</h1>";
-                                        """
+                    document.body.innerHTML = "<h1>test</h1>";
+                    """
                         );
                     });
 
