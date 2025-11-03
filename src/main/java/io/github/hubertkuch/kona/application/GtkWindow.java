@@ -2,7 +2,6 @@ package io.github.hubertkuch.kona.application;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
-import java.util.Optional;
 
 /**
  * Linux window strategy implementation using GTK 3 and Project Panama.
@@ -25,6 +24,9 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     private MethodHandle gtkWidgetShowAll;
     private MethodHandle gtkMain;
     private MethodHandle gtkWindowSetPosition;
+    private MethodHandle gtkContainerAdd;
+
+    private MemorySegment windowHandle;
 
     /**
      * Checks if this strategy can be used on the current system.
@@ -85,6 +87,11 @@ public class GtkWindow implements AppWindow, AutoCloseable {
                     FunctionDescriptor.ofVoid()
             );
 
+            gtkContainerAdd = linker.downcallHandle(
+                    gtkLib.find("gtk_container_add").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
             gtkInit.invokeExact(MemorySegment.NULL, MemorySegment.NULL);
 
             return true;
@@ -98,21 +105,40 @@ public class GtkWindow implements AppWindow, AutoCloseable {
         }
     }
 
+    /**
+     * Adds a widget (like a WebView) to this window container.
+     *
+     * @param windowHandle The handle to the GtkWindow (container).
+     * @param widgetHandle The handle to the GtkWidget to add.
+     */
+    public void addWidget(long windowHandle, long widgetHandle) {
+        if (windowHandle == 0L || widgetHandle == 0L) {
+            System.err.println("Invalid handles for addWidget.");
+            return;
+        }
+        try {
+            MemorySegment window = MemorySegment.ofAddress(windowHandle);
+            MemorySegment widget = MemorySegment.ofAddress(widgetHandle);
+            gtkContainerAdd.invokeExact(window, widget);
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+
+    }
+
     @Override
     public long createWindow(String title, int width, int height) {
-        // 3. NIE twórz nowej areny. Użyj tej z pola klasy.
         try {
             MemorySegment window = (MemorySegment) gtkWindowNew.invokeExact(GTK_WINDOW_TOPLEVEL);
-
-            // 4. Alokuj pamięć używając `this.arena`
             MemorySegment cTitle = this.arena.allocateFrom(title);
 
             gtkWindowSetTitle.invokeExact(window, cTitle);
             gtkWindowSetDefaultSize.invokeExact(window, width, height);
-            gtkWindowSetPosition.invokeExact(window, 1); // 1 = GTK_WIN_POS_CENTER
+            gtkWindowSetPosition.invokeExact(window, 1);
+
+            this.windowHandle = window;
 
             return window.address();
-
         } catch (Throwable e) {
             e.printStackTrace();
             return 0L;
@@ -120,15 +146,14 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     }
 
     @Override
-    public void showWindow(long windowHandle) {
-        if (windowHandle == 0L) {
+    public void showWindow() {
+        if (windowHandle.address() == 0L) {
             System.err.println("Cannot show window: invalid window handle.");
             return;
         }
 
         try {
-            MemorySegment window = MemorySegment.ofAddress(windowHandle);
-            gtkWidgetShowAll.invokeExact(window);
+            gtkWidgetShowAll.invokeExact(windowHandle);
         } catch (Throwable e) {
             e.printStackTrace();
         }
