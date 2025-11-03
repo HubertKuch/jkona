@@ -2,6 +2,9 @@ package io.github.hubertkuch.kona.application;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Linux window strategy implementation using GTK 3 and Project Panama.
@@ -11,106 +14,172 @@ public class GtkWindow implements AppWindow, AutoCloseable {
 
     private static final int GTK_WINDOW_TOPLEVEL = 0;
 
-    // Arena będzie teraz polem klasy, aby żyła tak długo, jak obiekt
     private Arena arena;
-
     private Linker linker;
+
     private SymbolLookup gtkLib;
+    private final ConcurrentLinkedQueue<Runnable> taskQueue = new ConcurrentLinkedQueue<>();
 
     private MethodHandle gtkInit;
     private MethodHandle gtkWindowNew;
     private MethodHandle gtkWindowSetTitle;
     private MethodHandle gtkWindowSetDefaultSize;
+    private SymbolLookup gobjectLib;
     private MethodHandle gtkWidgetShowAll;
-    private MethodHandle gtkMain;
-    private MethodHandle gtkWindowSetPosition;
     private MethodHandle gtkContainerAdd;
-
-    private MemorySegment windowHandle;
+    private MethodHandle gtkWindowSetPosition;
+    private MethodHandle gtkMain;
+    private MethodHandle gtkMainQuit;
+    private MethodHandle gSignalConnect;
+    private MethodHandle gIdleAdd;
+    private MemorySegment onWindowDestroyStub;
+    private MemorySegment idleCallbackStub;
 
     /**
      * Checks if this strategy can be used on the current system.
-     * It performs a fast check by trying to look up the required native library.
-     *
      * @return true if GTK 3 library is found, false otherwise.
      */
     public static boolean isSupported() {
-        try (Arena checkArena = Arena.ofConfined()) {
+        try (Arena checkArena = Arena.ofShared()) {
             SymbolLookup.libraryLookup("libgtk-3.so", checkArena);
+            SymbolLookup.libraryLookup("libgobject-2.0.so", checkArena);
+
             return true;
         } catch (Throwable e) {
             return false;
         }
+    }
+
+    /**
+     * This is the Java method that will be called *by C* when the window is destroyed.
+     * It MUST match the C callback signature: (GtkWidget* widget, gpointer user_data)
+     */
+    public void onWindowDestroyed(MemorySegment widget, MemorySegment userData) {
+        System.out.println("===> UPCALL: Window is closing! Quitting main loop.");
+        try {
+            gtkMainQuit.invokeExact();
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * This is the Java method called *by C* (via g_idle_add) to run tasks from the queue.
+     * It MUST match the C callback signature: (gpointer user_data)
+     *
+     * @return 0 (G_SOURCE_REMOVE) to ensure the callback only runs once per schedule.
+     */
+    public int onIdleCallback(MemorySegment userData) {
+        Runnable task = taskQueue.poll();
+        if (task != null) {
+            try {
+                task.run();
+            } catch (Exception e) {
+                System.err.println("Error executing scheduled task:");
+                e.printStackTrace();
+            }
+        }
+        return 0;
     }
 
     @Override
     public boolean initialize() {
         try {
-            this.arena = Arena.ofConfined();
-
+            this.arena = Arena.ofShared();
             this.linker = Linker.nativeLinker();
 
             this.gtkLib = SymbolLookup.libraryLookup("libgtk-3.so", this.arena);
+            this.gobjectLib = SymbolLookup.libraryLookup("libgobject-2.0.so", this.arena);
 
             gtkInit = linker.downcallHandle(
                     gtkLib.find("gtk_init").get(),
                     FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
             );
-
             gtkWindowNew = linker.downcallHandle(
                     gtkLib.find("gtk_window_new").get(),
                     FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
             );
-
             gtkWindowSetTitle = linker.downcallHandle(
                     gtkLib.find("gtk_window_set_title").get(),
                     FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
             );
-
             gtkWindowSetDefaultSize = linker.downcallHandle(
                     gtkLib.find("gtk_window_set_default_size").get(),
                     FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
             );
-
             gtkWindowSetPosition = linker.downcallHandle(
                     gtkLib.find("gtk_window_set_position").get(),
                     FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
             );
-
             gtkWidgetShowAll = linker.downcallHandle(
                     gtkLib.find("gtk_widget_show_all").get(),
                     FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
             );
-
+            gtkContainerAdd = linker.downcallHandle(gtkLib
+                    .find("gtk_container_add")
+                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
             gtkMain = linker.downcallHandle(
                     gtkLib.find("gtk_main").get(),
                     FunctionDescriptor.ofVoid()
             );
+            gtkMainQuit = linker.downcallHandle(gtkLib.find("gtk_main_quit").get(), FunctionDescriptor.ofVoid());
+            gSignalConnect = linker.downcallHandle(gobjectLib
+                    .find("g_signal_connect_data")
+                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
 
-            gtkContainerAdd = linker.downcallHandle(
-                    gtkLib.find("gtk_container_add").get(),
-                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-            );
+            gIdleAdd = linker.downcallHandle(gobjectLib
+                    .find("g_idle_add")
+                    .get(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+
+            MethodHandle destroyHandle = MethodHandles
+                    .lookup()
+                    .findVirtual(GtkWindow.class, "onWindowDestroyed",
+                            MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class)
+                    )
+                    .bindTo(this);
+
+            this.onWindowDestroyStub = linker.upcallStub(destroyHandle, FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS), this.arena);
+
+            MethodHandle idleHandle = MethodHandles
+                    .lookup()
+                    .findVirtual(GtkWindow.class, "onIdleCallback", MethodType.methodType(int.class, MemorySegment.class))
+                    .bindTo(this);
+
+            FunctionDescriptor idleDesc = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
+
+            this.idleCallbackStub = linker.upcallStub(idleHandle, idleDesc, this.arena);
 
             gtkInit.invokeExact(MemorySegment.NULL, MemorySegment.NULL);
-
             return true;
 
         } catch (Throwable e) {
-            if (this.arena != null) {
-                this.arena.close();
-            }
+            if (this.arena != null) this.arena.close();
             e.printStackTrace();
             return false;
         }
     }
 
-    /**
-     * Adds a widget (like a WebView) to this window container.
-     *
-     * @param windowHandle The handle to the GtkWindow (container).
-     * @param widgetHandle The handle to the GtkWidget to add.
-     */
+    @Override
+    public long createWindow(String title, int width, int height) {
+        try {
+            MemorySegment window = (MemorySegment) gtkWindowNew.invokeExact(GTK_WINDOW_TOPLEVEL);
+            MemorySegment cTitle = this.arena.allocateFrom(title);
+            gtkWindowSetTitle.invokeExact(window, cTitle);
+            gtkWindowSetDefaultSize.invokeExact(window, width, height);
+            gtkWindowSetPosition.invokeExact(window, 1);
+
+            MemorySegment cDestroySignal = this.arena.allocateFrom("destroy");
+
+            gSignalConnect.invokeExact(window, cDestroySignal, this.onWindowDestroyStub, MemorySegment.NULL, MemorySegment.NULL, 0);
+
+            return window.address();
+        } catch (Throwable e) {
+            e.printStackTrace();
+            return 0L;
+        }
+    }
+
+    @Override
     public void addWidget(long windowHandle, long widgetHandle) {
         if (windowHandle == 0L || widgetHandle == 0L) {
             System.err.println("Invalid handles for addWidget.");
@@ -123,37 +192,32 @@ public class GtkWindow implements AppWindow, AutoCloseable {
         } catch (Throwable e) {
             e.printStackTrace();
         }
-
     }
 
     @Override
-    public long createWindow(String title, int width, int height) {
-        try {
-            MemorySegment window = (MemorySegment) gtkWindowNew.invokeExact(GTK_WINDOW_TOPLEVEL);
-            MemorySegment cTitle = this.arena.allocateFrom(title);
-
-            gtkWindowSetTitle.invokeExact(window, cTitle);
-            gtkWindowSetDefaultSize.invokeExact(window, width, height);
-            gtkWindowSetPosition.invokeExact(window, 1);
-
-            this.windowHandle = window;
-
-            return window.address();
-        } catch (Throwable e) {
-            e.printStackTrace();
-            return 0L;
-        }
-    }
-
-    @Override
-    public void showWindow() {
-        if (windowHandle.address() == 0L) {
+    public void showWindow(long windowHandle) {
+        if (windowHandle == 0L) {
             System.err.println("Cannot show window: invalid window handle.");
             return;
         }
-
         try {
-            gtkWidgetShowAll.invokeExact(windowHandle);
+            MemorySegment window = MemorySegment.ofAddress(windowHandle);
+            gtkWidgetShowAll.invokeExact(window);
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Schedules a task to be run on the main GTK thread.
+     * This method IS thread-safe.
+     *
+     * @param task The task to execute.
+     */
+    public void scheduleTask(Runnable task) {
+        taskQueue.offer(task);
+        try {
+            gIdleAdd.invoke(this.idleCallbackStub, MemorySegment.NULL);
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -162,9 +226,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     @Override
     public void runEventLoop() {
         try {
-            System.out.println("Starting GTK event loop...");
             gtkMain.invokeExact();
-            System.out.println("GTK event loop finished.");
         } catch (Throwable e) {
             e.printStackTrace();
         }
