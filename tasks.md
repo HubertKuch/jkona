@@ -3,7 +3,7 @@
 ## Core Application Features:
 
 *   **Bidirectional Communication (Java -> JS):**
-    *   Implement a mechanism to send messages or data from the Java backend to the JavaScript frontend. This could involve a callback system where JavaScript registers handlers that Java can invoke.
+    *   *Partially Implemented:* Java to JavaScript communication is now possible. JavaScript helpers have been moved to a `kona-js` Node.js package.
 
 *   **File System Access:**
     *   Expose safe file system operations to the frontend, such as opening file dialogs, reading, and writing files, with user permission.

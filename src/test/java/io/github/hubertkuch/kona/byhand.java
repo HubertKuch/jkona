@@ -9,11 +9,14 @@ import io.github.hubertkuch.kona.routing.KonaRouterImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.temporal.TemporalField;
+
 public class byhand {
 
     private static final Logger log = LoggerFactory.getLogger(byhand.class);
     private static final String CONTROLLER_PACKAGE = "io.github.hubertkuch.kona";
-    private static final String BLANK_PAGE_URI = "about:blank";
+    private static final String BLANK_PAGE_URI = "http://localhost:5173/";
 
     @KonaController(name = "test")
     public static class TestController {
@@ -25,7 +28,7 @@ public class byhand {
         @MessageHandler(action = "test")
         public TestResponse test(TestPayload payload) {
             log.info("From javascript => {}", payload.message);
-            return new TestResponse("Hello from Java!");
+            return new TestResponse("Hello from Java! Its now %s".formatted(Instant.now().toString()));
         }
     }
 
@@ -54,44 +57,7 @@ public class byhand {
             window.showWindow(handle);
 
             Thread.ofVirtual().start(() -> {
-                try {
-                    log.info("[Worker Thread] Waiting 3 seconds...");
-                    Thread.sleep(3000);
 
-                    log.info("[Worker Thread] Scheduling JS tasks on UI thread...");
-
-                    window.scheduleTask(() -> {
-                        log.info("[UI Thread] Running JS 1 (Setup Kona API)");
-                        webView.runJavaScript(webViewHandle, getKonaApiJs());
-                    });
-
-                    window.scheduleTask(() -> {
-                        log.info("[UI Thread] Running JS 2 (color)");
-                        webView.runJavaScript(webViewHandle,
-                                """
-                                document.body.style.backgroundColor = '#2a2a2a';
-                                document.body.style.color = 'white';
-                                document.body.innerHTML = "<h1>Kona Bidirectional Communication Test</h1>";
-                                """
-                        );
-                    });
-
-                    window.scheduleTask(() -> {
-                        log.info("[UI Thread] Running JS 3 (Invoke Java and wait for response)");
-                        String jsMessage = """
-                            kona.call('test', 'test', { message: "Hello from Kona front" })
-                                .then(response => {
-                                    console.log('Response from Java:', response);
-                                    document.body.innerHTML += `<p>Response from Java: ${response.response}</p>`;
-                                })
-                                .catch(error => console.error('Error from Java:', error));
-                        """;
-                        webView.runJavaScript(webViewHandle, jsMessage);
-                    });
-
-                } catch (InterruptedException e) {
-                    log.error("Error in worker thread", e);
-                }
             });
 
             log.info("[Main Thread] Starting GTK event loop (blocking)...");
@@ -99,9 +65,5 @@ public class byhand {
 
             log.info("[Main Thread] Event loop finished. Exiting.");
         }
-    }
-
-    private static String getKonaApiJs() {
-        return "";
     }
 }
