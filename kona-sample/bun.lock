@@ -4,7 +4,7 @@
     "": {
       "name": "kona-sample",
       "dependencies": {
-        "kona-js": "^1.1.0",
+        "kona-js": "^1.1.3",
         "react": "^19.1.1",
         "react-dom": "^19.1.1",
       },
@@ -380,7 +380,7 @@
 
     "keyv": ["keyv@4.5.4", "", { "dependencies": { "json-buffer": "3.0.1" } }, "sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw=="],
 
-    "kona-js": ["kona-js@1.1.0", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-8svCutYTR431gF4xBTE3uIuff4m0pxF9Sdem/83wyYYLmQ/gwlihpQ6Um5/3DiRKiD3KSW/XgsEQVfsxo9FFpA=="],
+    "kona-js": ["kona-js@1.1.3", "", { "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-8POELq3djEGG6X6szQhZNTuUQMMkH/OlWfRDPDD+3UK8YjBmb9DvHJqZIuOZKpkX9aKY0Uq/fHFYP5NwwSOflg=="],
 
     "levn": ["levn@0.4.1", "", { "dependencies": { "prelude-ls": "^1.2.1", "type-check": "~0.4.0" } }, "sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ=="],
 

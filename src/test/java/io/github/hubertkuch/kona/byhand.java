@@ -56,10 +56,6 @@ public class byhand {
             webView.loadUri(webViewHandle, BLANK_PAGE_URI);
             window.showWindow(handle);
 
-            Thread.ofVirtual().start(() -> {
-
-            });
-
             log.info("[Main Thread] Starting GTK event loop (blocking)...");
             window.runEventLoop();
 

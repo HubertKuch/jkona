@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.reflect.TypeToken;
 import io.github.hubertkuch.kona.message.KonaController;
 import io.github.hubertkuch.kona.message.MessageHandler;
 import io.github.hubertkuch.kona.message.Payload;
@@ -16,7 +15,6 @@ import io.github.hubertkuch.kona.application.GtkWindow;
 import io.github.hubertkuch.kona.application.WebView;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -140,7 +138,6 @@ public class KonaRouterImpl implements KonaRouter {
     private void sendResponse(String callbackId, Object result) {
         try {
             String jsonResult = gson.toJson(result);
-            // Important: Escape the JSON string for safe injection into a JS string literal
             String escapedJson = jsonResult.replace("\\", "\\\\").replace("'", "\\'");
 
             String js = String.format("window.kona.resolveCallback('%s', '%s');", callbackId, escapedJson);
