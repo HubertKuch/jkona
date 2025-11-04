@@ -6,8 +6,12 @@ import io.github.hubertkuch.kona.message.KonaController;
 import io.github.hubertkuch.kona.message.MessageHandler;
 import io.github.hubertkuch.kona.message.Payload;
 import io.github.hubertkuch.kona.routing.KonaRouterImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class byhand {
+
+    private static final Logger log = LoggerFactory.getLogger(byhand.class);
 
     @KonaController(name = "test")
     public static class TestController {
@@ -17,7 +21,7 @@ public class byhand {
 
         @MessageHandler(action = "test")
         public void test(TestPayload payload) {
-            System.out.println("From javascript => " + payload.message);
+            log.info("From javascript => {}", payload.message);
         }
     }
 
@@ -47,13 +51,13 @@ public class byhand {
 
             Thread.ofVirtual().start(() -> {
                 try {
-                    System.out.println("[Worker Thread] Waiting 3 seconds...");
+                    log.info("[Worker Thread] Waiting 3 seconds...");
                     Thread.sleep(3000);
 
-                    System.out.println("[Worker Thread] Scheduling JS tasks on UI thread...");
+                    log.info("[Worker Thread] Scheduling JS tasks on UI thread...");
 
                     window.scheduleTask(() -> {
-                        System.out.println("[UI Thread] Running JS 1 (color)");
+                        log.info("[UI Thread] Running JS 1 (color)");
                         webView.runJavaScript(webViewHandle,
                                 """
                                 document.body.style.backgroundColor = '#2a2a2a';
@@ -64,7 +68,7 @@ public class byhand {
                     });
 
                     window.scheduleTask(() -> {
-                        System.out.println("[UI Thread] Running JS 3 (test test)");
+                        log.info("[UI Thread] Running JS 3 (test test)");
 
                         String jsMessage = """
                             const msg = {
@@ -78,14 +82,14 @@ public class byhand {
                     });
 
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    log.error("Error in worker thread", e);
                 }
             });
 
-            System.out.println("[Main Thread] Starting GTK event loop (blocking)...");
+            log.info("[Main Thread] Starting GTK event loop (blocking)...");
             window.runEventLoop();
 
-            System.out.println("[Main Thread] Event loop finished. Exiting.");
+            log.info("[Main Thread] Event loop finished. Exiting.");
         }
     }
 }

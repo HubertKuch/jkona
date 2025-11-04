@@ -9,6 +9,8 @@ import io.github.hubertkuch.kona.message.KonaController;
 import io.github.hubertkuch.kona.message.MessageHandler;
 import io.github.hubertkuch.kona.message.Payload;
 import org.reflections.Reflections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -18,6 +20,7 @@ import java.util.Set;
 
 public class KonaRouterImpl implements KonaRouter {
 
+    private static final Logger log = LoggerFactory.getLogger(KonaRouterImpl.class);
     private final Gson gson = new Gson();
     private final Type messageType = new TypeToken<Map<String, String>>() {}.getType();
 
@@ -25,14 +28,14 @@ public class KonaRouterImpl implements KonaRouter {
     private final Map<String, Map<String, HandlerTarget>> routes = new HashMap<>();
 
     public KonaRouterImpl() {
-        System.out.println("[KonaRouter] Initialized.");
+        log.info("[KonaRouter] Initialized.");
     }
 
     public void registerPackage(String packageName) {
         Reflections reflections = new Reflections(packageName);
         Set<Class<?>> controllerClasses = reflections.getTypesAnnotatedWith(KonaController.class);
 
-        System.out.println("[KonaRouter] Scanning " + packageName + "...");
+        log.info("[KonaRouter] Scanning {}...", packageName);
         for (Class<?> controllerClass : controllerClasses) {
             try {
                 KonaController controllerAnnotation = controllerClass.getAnnotation(KonaController.class);
@@ -49,23 +52,20 @@ public class KonaRouterImpl implements KonaRouter {
                         if (method.getParameterCount() == 1) {
                             payloadType = method.getParameterTypes()[0];
                             if (! Payload.class.isAssignableFrom(payloadType)) {
-                                System.err.println("WARNING: Payload type " + payloadType.getName() +
-                                        " does not implement Payload interface.");
+                                log.warn("Payload type {} does not implement Payload interface.", payloadType.getName());
                             }
                         } else if (method.getParameterCount() > 1) {
-                            System.err.println("WARNING: @MessageHandler " + actionName +
-                                    " has > 1 param. Only one (Payload object) or zero params are supported.");
+                            log.warn("@MessageHandler {} has > 1 param. Only one (Payload object) or zero params are supported.", actionName);
                         }
 
                         actionMap.put(actionName, new HandlerTarget(controllerInstance, method, payloadType));
-                        System.out.println("  -> Registered: " + controllerName + " -> " + actionName);
+                        log.info("  -> Registered: {} -> {}", controllerName, actionName);
                     }
                 }
                 routes.put(controllerName, actionMap);
 
             } catch (Exception e) {
-                System.err.println("Failed to register controller: " + controllerClass.getName());
-                e.printStackTrace();
+                log.error("Failed to register controller: {}", controllerClass.getName(), e);
             }
         }
     }
@@ -84,19 +84,19 @@ public class KonaRouterImpl implements KonaRouter {
             JsonElement payloadElement = messageObject.get("payload");
 
             if (controllerName == null || actionName == null) {
-                System.err.println("[KonaRouter] Invalid message: 'controller' or 'action' missing.");
+                log.error("[KonaRouter] Invalid message: 'controller' or 'action' missing.");
                 return;
             }
 
             Map<String, HandlerTarget> actionMap = routes.get(controllerName);
             if (actionMap == null) {
-                System.err.println("[KonaRouter] No controller found: " + controllerName);
+                log.error("[KonaRouter] No controller found: {}", controllerName);
                 return;
             }
 
             HandlerTarget target = actionMap.get(actionName);
             if (target == null) {
-                System.err.println("[KonaRouter] No action found: " + controllerName + " -> " + actionName);
+                log.error("[KonaRouter] No action found: {} -> {}", controllerName, actionName);
                 return;
             }
 
@@ -104,7 +104,7 @@ public class KonaRouterImpl implements KonaRouter {
             if (target.payloadType() != null) {
                 // Method expects a payload object.
                 if (payloadElement == null || payloadElement.isJsonNull()) {
-                    System.err.println("[KonaRouter] Action " + actionName + " expected a payload, but got null.");
+                    log.error("[KonaRouter] Action {} expected a payload, but got null.", actionName);
                     return;
                 }
                 // Deserialize directly from the JsonElement into the target class
@@ -116,8 +116,7 @@ public class KonaRouterImpl implements KonaRouter {
             }
 
         } catch (Exception e) {
-            System.err.println("[KonaRouter] Error processing message: " + message);
-            e.printStackTrace();
+            log.error("[KonaRouter] Error processing message: {}", message, e);
         }
     }
 }

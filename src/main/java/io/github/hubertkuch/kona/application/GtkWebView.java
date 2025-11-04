@@ -1,6 +1,8 @@
 package io.github.hubertkuch.kona.application;
 
 import io.github.hubertkuch.kona.routing.KonaRouter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
@@ -8,6 +10,8 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 
 public class GtkWebView implements AutoCloseable, WebView {
+
+    private static final Logger log = LoggerFactory.getLogger(GtkWebView.class);
 
     private Arena arena;
     private Linker linker;
@@ -56,7 +60,7 @@ public class GtkWebView implements AutoCloseable, WebView {
             MemorySegment cStringPointer = (MemorySegment) jscValueToString.invokeExact(jscValue);
 
             if (cStringPointer.equals(MemorySegment.NULL)) {
-                System.err.println("===> UPCALL (JS->Java): Received NULL string.");
+                log.warn("===> UPCALL (JS->Java): Received NULL string.");
                 return;
             }
 
@@ -65,11 +69,11 @@ public class GtkWebView implements AutoCloseable, WebView {
 
             if (upCallHandler != null) upCallHandler.onMessage(message);
 
-            System.out.println("===> UPCALL (JS->Java): " + message);
+            log.debug("===> UPCALL (JS->Java): {}", message);
 
             gFree.invokeExact(cStringPointer);
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error in onScriptMessageReceived", e);
         }
     }
 
@@ -165,14 +169,14 @@ public class GtkWebView implements AutoCloseable, WebView {
             return true;
         } catch (Throwable e) {
             if (this.arena != null) this.arena.close();
-            e.printStackTrace();
+            log.error("Error during initialization", e);
             return false;
         }
     }
 
     public void runJavaScript(long webViewHandle, String script) {
         if (webViewHandle == 0L || this.webkitWebViewEvaluateJavascript == null) {
-            System.err.println("Cannot run JavaScript: invalid handle or not initialized.");
+            log.error("Cannot run JavaScript: invalid handle or not initialized.");
             return;
         }
 
@@ -190,7 +194,7 @@ public class GtkWebView implements AutoCloseable, WebView {
                     MemorySegment.NULL
             );
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error running JavaScript", e);
         }
     }
 
@@ -217,7 +221,7 @@ public class GtkWebView implements AutoCloseable, WebView {
 
             return webView.address();
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error creating web view widget", e);
             return 0L;
         }
     }
@@ -228,7 +232,7 @@ public class GtkWebView implements AutoCloseable, WebView {
             MemorySegment cUri = this.arena.allocateFrom(uri);
             webkitWebViewLoadUri.invokeExact(webView, cUri);
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error loading URI", e);
         }
     }
 

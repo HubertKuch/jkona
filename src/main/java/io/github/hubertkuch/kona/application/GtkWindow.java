@@ -1,5 +1,8 @@
 package io.github.hubertkuch.kona.application;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -12,6 +15,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class GtkWindow implements AppWindow, AutoCloseable {
 
+    private static final Logger log = LoggerFactory.getLogger(GtkWindow.class);
     private static final int GTK_WINDOW_TOPLEVEL = 0;
 
     private Arena arena;
@@ -55,11 +59,11 @@ public class GtkWindow implements AppWindow, AutoCloseable {
      * It MUST match the C callback signature: (GtkWidget* widget, gpointer user_data)
      */
     public void onWindowDestroyed(MemorySegment widget, MemorySegment userData) {
-        System.out.println("===> UPCALL: Window is closing! Quitting main loop.");
+        log.info("===> UPCALL: Window is closing! Quitting main loop.");
         try {
             gtkMainQuit.invokeExact();
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error in onWindowDestroyed",e);
         }
     }
 
@@ -75,8 +79,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
             try {
                 task.run();
             } catch (Exception e) {
-                System.err.println("Error executing scheduled task:");
-                e.printStackTrace();
+                log.error("Error executing scheduled task:", e);
             }
         }
         return 0;
@@ -154,7 +157,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
 
         } catch (Throwable e) {
             if (this.arena != null) this.arena.close();
-            e.printStackTrace();
+            log.error("Error during initialization", e);
             return false;
         }
     }
@@ -174,7 +177,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
 
             return window.address();
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error creating window", e);
             return 0L;
         }
     }
@@ -182,7 +185,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     @Override
     public void addWidget(long windowHandle, long widgetHandle) {
         if (windowHandle == 0L || widgetHandle == 0L) {
-            System.err.println("Invalid handles for addWidget.");
+            log.error("Invalid handles for addWidget.");
             return;
         }
         try {
@@ -190,21 +193,21 @@ public class GtkWindow implements AppWindow, AutoCloseable {
             MemorySegment widget = MemorySegment.ofAddress(widgetHandle);
             gtkContainerAdd.invokeExact(window, widget);
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error adding widget", e);
         }
     }
 
     @Override
     public void showWindow(long windowHandle) {
         if (windowHandle == 0L) {
-            System.err.println("Cannot show window: invalid window handle.");
+            log.error("Cannot show window: invalid window handle.");
             return;
         }
         try {
             MemorySegment window = MemorySegment.ofAddress(windowHandle);
             gtkWidgetShowAll.invokeExact(window);
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error showing window", e);
         }
     }
 
@@ -219,7 +222,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
         try {
             gIdleAdd.invoke(this.idleCallbackStub, MemorySegment.NULL);
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error scheduling task", e);
         }
     }
 
@@ -228,7 +231,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
         try {
             gtkMain.invokeExact();
         } catch (Throwable e) {
-            e.printStackTrace();
+            log.error("Error in runEventLoop", e);
         }
     }
 
