@@ -12,6 +12,9 @@ import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.github.hubertkuch.kona.application.GtkWindow;
+import io.github.hubertkuch.kona.application.WebView;
+
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.HashMap;
@@ -22,12 +25,17 @@ public class KonaRouterImpl implements KonaRouter {
 
     private static final Logger log = LoggerFactory.getLogger(KonaRouterImpl.class);
     private final Gson gson = new Gson();
-    private final Type messageType = new TypeToken<Map<String, String>>() {}.getType();
+    private final GtkWindow window;
+    private final WebView webView;
+    private final long webViewHandle;
 
     private record HandlerTarget(Object instance, Method method, Class<?> payloadType) {}
     private final Map<String, Map<String, HandlerTarget>> routes = new HashMap<>();
 
-    public KonaRouterImpl() {
+    public KonaRouterImpl(GtkWindow window, WebView webView, long webViewHandle) {
+        this.window = window;
+        this.webView = webView;
+        this.webViewHandle = webViewHandle;
         log.info("[KonaRouter] Initialized.");
     }
 
@@ -76,14 +84,11 @@ public class KonaRouterImpl implements KonaRouter {
     @Override
     public void onMessage(String message) {
         try {
-            // 1. Parse the whole message into a generic JSON object
             JsonObject messageObject = JsonParser.parseString(message).getAsJsonObject();
 
-            // 2. Get controller and action as strings
             String controllerName = messageObject.get("controller").getAsString();
             String actionName = messageObject.get("action").getAsString();
-
-            // 3. Get the payload as a JsonElement
+            String callbackId = messageObject.has("callbackId") ? messageObject.get("callbackId").getAsString() : null;
             JsonElement payloadElement = messageObject.get("payload");
 
             if (controllerName == null || actionName == null) {
@@ -91,35 +96,60 @@ public class KonaRouterImpl implements KonaRouter {
                 return;
             }
 
-            Map<String, HandlerTarget> actionMap = routes.get(controllerName);
-            if (actionMap == null) {
-                log.error("[KonaRouter] No controller found: {}", controllerName);
-                return;
-            }
+            HandlerTarget target = findHandler(controllerName, actionName);
+            if (target == null) return; // Error already logged in findHandler
 
-            HandlerTarget target = actionMap.get(actionName);
-            if (target == null) {
-                log.error("[KonaRouter] No action found: {} -> {}", controllerName, actionName);
-                return;
-            }
+            Object result = invokeHandler(target, payloadElement);
 
-            // 4. NEW INVOCATION LOGIC
-            if (target.payloadType() != null) {
-                // Method expects a payload object.
-                if (payloadElement == null || payloadElement.isJsonNull()) {
-                    log.error("[KonaRouter] Action {} expected a payload, but got null.", actionName);
-                    return;
-                }
-                // Deserialize directly from the JsonElement into the target class
-                Object payloadObject = gson.fromJson(payloadElement, target.payloadType());
-                target.method().invoke(target.instance(), payloadObject);
-            } else {
-                // Method expects no parameters
-                target.method().invoke(target.instance());
+            if (callbackId != null && result != null) {
+                sendResponse(callbackId, result);
             }
 
         } catch (Exception e) {
             log.error("[KonaRouter] Error processing message: {}", message, e);
+        }
+    }
+
+    private HandlerTarget findHandler(String controllerName, String actionName) {
+        Map<String, HandlerTarget> actionMap = routes.get(controllerName);
+        if (actionMap == null) {
+            log.error("[KonaRouter] No controller found: {}", controllerName);
+            return null;
+        }
+        HandlerTarget target = actionMap.get(actionName);
+        if (target == null) {
+            log.error("[KonaRouter] No action found: {} -> {}", controllerName, actionName);
+            return null;
+        }
+        return target;
+    }
+
+    private Object invokeHandler(HandlerTarget target, JsonElement payloadElement) throws Exception {
+        if (target.payloadType() != null) {
+            if (payloadElement == null || payloadElement.isJsonNull()) {
+                log.error("[KonaRouter] Action {} expected a payload, but got null.", target.method().getName());
+                return null;
+            }
+            Object payloadObject = gson.fromJson(payloadElement, target.payloadType());
+            return target.method().invoke(target.instance(), payloadObject);
+        } else {
+            return target.method().invoke(target.instance());
+        }
+    }
+
+    private void sendResponse(String callbackId, Object result) {
+        try {
+            String jsonResult = gson.toJson(result);
+            // Important: Escape the JSON string for safe injection into a JS string literal
+            String escapedJson = jsonResult.replace("\\", "\\\\").replace("'", "\\'");
+
+            String js = String.format("window.kona.resolveCallback('%s', '%s');", callbackId, escapedJson);
+
+            window.scheduleTask(() -> {
+                webView.runJavaScript(webViewHandle, js);
+            });
+        } catch (Exception e) {
+            log.error("[KonaRouter] Failed to send response for callbackId: {}", callbackId, e);
         }
     }
 }

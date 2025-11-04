@@ -20,10 +20,12 @@ public class byhand {
         public TestController() {}
 
         public record TestPayload(String message) implements Payload {}
+        public record TestResponse(String response) implements Payload {}
 
         @MessageHandler(action = "test")
-        public void test(TestPayload payload) {
+        public TestResponse test(TestPayload payload) {
             log.info("From javascript => {}", payload.message);
+            return new TestResponse("Hello from Java!");
         }
     }
 
@@ -39,13 +41,13 @@ public class byhand {
                 throw new RuntimeException("Cannot initialize window or webview");
             }
 
-            var router = new KonaRouterImpl();
+            long webViewHandle = webView.createWebViewWidget();
+            var router = new KonaRouterImpl(window, webView, webViewHandle);
 
             router.registerPackage(CONTROLLER_PACKAGE);
             webView.setScriptMessageHandler(router);
 
             var handle = window.createWindow("Test window", 800, 400);
-            long webViewHandle = webView.createWebViewWidget();
 
             window.addWidget(handle, webViewHandle);
             webView.loadUri(webViewHandle, BLANK_PAGE_URI);
@@ -59,26 +61,30 @@ public class byhand {
                     log.info("[Worker Thread] Scheduling JS tasks on UI thread...");
 
                     window.scheduleTask(() -> {
-                        log.info("[UI Thread] Running JS 1 (color)");
+                        log.info("[UI Thread] Running JS 1 (Setup Kona API)");
+                        webView.runJavaScript(webViewHandle, getKonaApiJs());
+                    });
+
+                    window.scheduleTask(() -> {
+                        log.info("[UI Thread] Running JS 2 (color)");
                         webView.runJavaScript(webViewHandle,
                                 """
                                 document.body.style.backgroundColor = '#2a2a2a';
                                 document.body.style.color = 'white';
-                                document.body.innerHTML = "<h1>test</h1>";
-                    """
+                                document.body.innerHTML = "<h1>Kona Bidirectional Communication Test</h1>";
+                                """
                         );
                     });
 
                     window.scheduleTask(() -> {
-                        log.info("[UI Thread] Running JS 3 (test test)");
-
+                        log.info("[UI Thread] Running JS 3 (Invoke Java and wait for response)");
                         String jsMessage = """
-                            const msg = {
-                                controller: 'test',
-                                action: 'test',
-                                payload: { message: "Hello from Kona front" }
-                            };
-                            window.webkit.messageHandlers.kona.postMessage(JSON.stringify(msg));
+                            kona.call('test', 'test', { message: "Hello from Kona front" })
+                                .then(response => {
+                                    console.log('Response from Java:', response);
+                                    document.body.innerHTML += `<p>Response from Java: ${response.response}</p>`;
+                                })
+                                .catch(error => console.error('Error from Java:', error));
                         """;
                         webView.runJavaScript(webViewHandle, jsMessage);
                     });
@@ -93,5 +99,9 @@ public class byhand {
 
             log.info("[Main Thread] Event loop finished. Exiting.");
         }
+    }
+
+    private static String getKonaApiJs() {
+        return "";
     }
 }
