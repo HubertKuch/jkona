@@ -1,11 +1,13 @@
 package io.github.hubertkuch.kona.application;
 
+import io.github.hubertkuch.kona.routing.KonaRouter;
+
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 
-public class GtkWebView implements AutoCloseable {
+public class GtkWebView implements AutoCloseable, WebView {
 
     private Arena arena;
     private Linker linker;
@@ -27,6 +29,8 @@ public class GtkWebView implements AutoCloseable {
     private MethodHandle jscValueToString;
     private MethodHandle gFree;
     private MemorySegment onScriptMessageStub;
+
+    private KonaRouter upCallHandler;
 
 
     public static boolean isSupported() {
@@ -58,6 +62,8 @@ public class GtkWebView implements AutoCloseable {
 
             MemorySegment cStringData = cStringPointer.reinterpret(Long.MAX_VALUE);
             String message = cStringData.getString(0);
+
+            if (upCallHandler != null) upCallHandler.onMessage(message);
 
             System.out.println("===> UPCALL (JS->Java): " + message);
 
@@ -186,6 +192,11 @@ public class GtkWebView implements AutoCloseable {
         } catch (Throwable e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    public void setScriptMessageHandler(KonaRouter handler) {
+        this.upCallHandler = handler;
     }
 
     public long createWebViewWidget() {
