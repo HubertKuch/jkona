@@ -42,8 +42,10 @@ public class byhand {
                     });
 
                     window.scheduleTask(() -> {
-                        System.out.println("[UI Thread] Running JS 2 (alert)");
-                        webView.runJavaScript(webViewHandle, "alert('Message from Java!');");
+                        System.out.println("[UI Thread] Running JS 2 (postMessage)");
+                        webView.runJavaScript(webViewHandle,
+                                "window.webkit.messageHandlers.kona.postMessage('Hello from JavaScript!');"
+                        );
                     });
 
                 } catch (InterruptedException e) {

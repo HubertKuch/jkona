@@ -2,6 +2,8 @@ package io.github.hubertkuch.kona.application;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 
 public class GtkWebView implements AutoCloseable {
 
@@ -9,6 +11,8 @@ public class GtkWebView implements AutoCloseable {
     private Linker linker;
     private SymbolLookup webkitLib;
     private SymbolLookup gobjectLib;
+    private SymbolLookup jscLib;
+    private SymbolLookup glibLib;
 
     private MethodHandle webkitWebViewNew;
     private MethodHandle webkitWebViewLoadUri;
@@ -16,13 +20,50 @@ public class GtkWebView implements AutoCloseable {
     private MethodHandle webkitWebViewGetSettings;
     private MethodHandle gObjectSet;
 
+    private MethodHandle webkitWebViewGetUserContentManager;
+    private MethodHandle webkitUserContentManagerRegisterScriptMessageHandler;
+    private MethodHandle gSignalConnect;
+    private MethodHandle webkitJavascriptResultGetJsValue;
+    private MethodHandle jscValueToString;
+    private MethodHandle gFree;
+    private MemorySegment onScriptMessageStub;
+
+
     public static boolean isSupported() {
         try (Arena checkArena = Arena.ofConfined()) {
             SymbolLookup.libraryLookup("libwebkit2gtk-4.0.so", checkArena);
             SymbolLookup.libraryLookup("libgobject-2.0.so", checkArena);
+            SymbolLookup.libraryLookup("libjavascriptcoregtk-4.0.so", checkArena);
+            SymbolLookup.libraryLookup("libglib-2.0.so", checkArena);
             return true;
         } catch (Throwable e) {
             return false;
+        }
+    }
+
+    /**
+     * This is the Java method called *by C* when a JavaScript message is received.
+     * It MUST match the C callback signature:
+     * (WebKitUserContentManager* manager, WebKitJavascriptResult* result, gpointer user_data)
+     */
+    public void onScriptMessageReceived(MemorySegment manager, MemorySegment jsResult, MemorySegment userData) {
+        try {
+            MemorySegment jscValue = (MemorySegment) webkitJavascriptResultGetJsValue.invokeExact(jsResult);
+            MemorySegment cStringPointer = (MemorySegment) jscValueToString.invokeExact(jscValue);
+
+            if (cStringPointer.equals(MemorySegment.NULL)) {
+                System.err.println("===> UPCALL (JS->Java): Received NULL string.");
+                return;
+            }
+
+            MemorySegment cStringData = cStringPointer.reinterpret(Long.MAX_VALUE);
+            String message = cStringData.getString(0);
+
+            System.out.println("===> UPCALL (JS->Java): " + message);
+
+            gFree.invokeExact(cStringPointer);
+        } catch (Throwable e) {
+            e.printStackTrace();
         }
     }
 
@@ -33,39 +74,87 @@ public class GtkWebView implements AutoCloseable {
 
             this.webkitLib = SymbolLookup.libraryLookup("libwebkit2gtk-4.0.so", this.arena);
             this.gobjectLib = SymbolLookup.libraryLookup("libgobject-2.0.so", this.arena);
+            this.jscLib = SymbolLookup.libraryLookup("libjavascriptcoregtk-4.0.so", this.arena);
+            this.glibLib = SymbolLookup.libraryLookup("libglib-2.0.so", this.arena);
 
-            webkitWebViewNew = linker.downcallHandle(webkitLib
-                    .find("webkit_web_view_new")
-                    .get(), FunctionDescriptor.of(ValueLayout.ADDRESS));
 
-            webkitWebViewLoadUri = linker.downcallHandle(webkitLib
-                    .find("webkit_web_view_load_uri")
-                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+            webkitWebViewNew = linker.downcallHandle(
+                    webkitLib.find("webkit_web_view_new").get(),
+                    FunctionDescriptor.of(ValueLayout.ADDRESS)
+            );
 
-            FunctionDescriptor evalDescriptor = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS,    // web_view
-                    ValueLayout.ADDRESS,    // script
-                    ValueLayout.JAVA_LONG,  // length
-                    ValueLayout.ADDRESS,    // world_name
-                    ValueLayout.ADDRESS,    // source_uri
-                    ValueLayout.ADDRESS,    // callback
-                    ValueLayout.ADDRESS     // user_data
+            webkitWebViewLoadUri = linker.downcallHandle(
+                    webkitLib.find("webkit_web_view_load_uri").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
+            FunctionDescriptor evalDescriptor = FunctionDescriptor.ofVoid(
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.JAVA_LONG,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS
             );
 
             this.webkitWebViewEvaluateJavascript = linker.downcallHandle(webkitLib
                     .find("webkit_web_view_evaluate_javascript")
                     .get(), evalDescriptor);
 
-            this.webkitWebViewGetSettings = linker.downcallHandle(webkitLib
-                    .find("webkit_web_view_get_settings")
-                    .get(), FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+            this.webkitWebViewGetSettings = linker.downcallHandle(
+                    webkitLib.find("webkit_web_view_get_settings").get(),
+                    FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
 
-            this.gObjectSet = linker.downcallHandle(gobjectLib
-                    .find("g_object_set")
-                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS,    // object
-                    ValueLayout.ADDRESS,    // property_name
-                    ValueLayout.JAVA_BOOLEAN, // value
-                    ValueLayout.ADDRESS     // NULL terminator
-            ));
+            this.gObjectSet = linker.downcallHandle(
+                    gobjectLib.find("g_object_set").get(),
+                    FunctionDescriptor.ofVoid(
+                            ValueLayout.ADDRESS,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.JAVA_BOOLEAN,
+                            ValueLayout.ADDRESS
+                    )
+            );
+
+            this.webkitWebViewGetUserContentManager = linker.downcallHandle(
+                    webkitLib.find("webkit_web_view_get_user_content_manager").get(),
+                    FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
+            this.webkitUserContentManagerRegisterScriptMessageHandler = linker.downcallHandle(
+                    webkitLib.find("webkit_user_content_manager_register_script_message_handler").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
+            this.gSignalConnect = linker.downcallHandle(gobjectLib
+                    .find("g_signal_connect_data")
+                    .get(), FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+
+            this.webkitJavascriptResultGetJsValue = linker.downcallHandle(
+                    webkitLib.find("webkit_javascript_result_get_js_value").get(),
+                    FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
+            this.jscValueToString = linker.downcallHandle(
+                    jscLib.find("jsc_value_to_string").get(),
+                    FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
+            this.gFree = linker.downcallHandle(
+                    glibLib.find("g_free").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
+            );
+
+            MethodHandle messageHandle = MethodHandles
+                    .lookup()
+                    .findVirtual(GtkWebView.class, "onScriptMessageReceived",
+                            MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class)
+                    )
+                    .bindTo(this);
+
+            FunctionDescriptor messageDesc = FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
+            this.onScriptMessageStub = linker.upcallStub(messageHandle, messageDesc, this.arena);
 
             return true;
         } catch (Throwable e) {
@@ -85,7 +174,15 @@ public class GtkWebView implements AutoCloseable {
             MemorySegment webView = MemorySegment.ofAddress(webViewHandle);
             MemorySegment cScript = this.arena.allocateFrom(script);
 
-            webkitWebViewEvaluateJavascript.invokeExact(webView, cScript, - 1L, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL);
+            webkitWebViewEvaluateJavascript.invokeExact(
+                    webView,
+                    cScript,
+                    -1L,
+                    MemorySegment.NULL,
+                    MemorySegment.NULL,
+                    MemorySegment.NULL,
+                    MemorySegment.NULL
+            );
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -98,6 +195,14 @@ public class GtkWebView implements AutoCloseable {
             MemorySegment settings = (MemorySegment) webkitWebViewGetSettings.invokeExact(webView);
             MemorySegment propName = this.arena.allocateFrom("enable-developer-extras");
             gObjectSet.invokeExact(settings, propName, true, MemorySegment.NULL);
+
+            MemorySegment contentManager = (MemorySegment) webkitWebViewGetUserContentManager.invokeExact(webView);
+            MemorySegment handlerName = this.arena.allocateFrom("kona");
+            webkitUserContentManagerRegisterScriptMessageHandler.invokeExact(contentManager, handlerName);
+
+            MemorySegment signalName = this.arena.allocateFrom("script-message-received::kona");
+            gSignalConnect.invokeExact(contentManager, signalName, this.onScriptMessageStub, MemorySegment.NULL, MemorySegment.NULL, 0);
+
 
             return webView.address();
         } catch (Throwable e) {
