@@ -2,8 +2,25 @@ package io.github.hubertkuch.kona;
 
 import io.github.hubertkuch.kona.application.GtkWebView;
 import io.github.hubertkuch.kona.application.GtkWindow;
+import io.github.hubertkuch.kona.message.KonaController;
+import io.github.hubertkuch.kona.message.MessageHandler;
+import io.github.hubertkuch.kona.message.Payload;
+import io.github.hubertkuch.kona.routing.KonaRouterImpl;
 
 public class byhand {
+
+    @KonaController(name = "test")
+    public static class TestController {
+        public TestController() {}
+
+        public record TestPayload(String message) implements Payload {}
+
+        @MessageHandler(action = "test")
+        public void test(TestPayload payload) {
+            System.out.println("From javascript => " + payload.message);
+        }
+    }
+
     public static void main(String[] args) {
 
         if (!GtkWindow.isSupported() || !GtkWebView.isSupported()) {
@@ -15,6 +32,11 @@ public class byhand {
             if (!window.initialize() || !webView.initialize()) {
                 throw new RuntimeException("Cannot initialize window or webview");
             }
+
+            var router = new KonaRouterImpl();
+
+            router.registerPackage("io.github.hubertkuch.kona");
+            webView.setScriptMessageHandler(router);
 
             var handle = window.createWindow("Test window", 800, 400);
             long webViewHandle = webView.createWebViewWidget();
@@ -34,18 +56,25 @@ public class byhand {
                         System.out.println("[UI Thread] Running JS 1 (color)");
                         webView.runJavaScript(webViewHandle,
                                 """
-                    document.body.style.backgroundColor = '#2a2a2a';
-                    document.body.style.color = 'white';
-                    document.body.innerHTML = "<h1>test</h1>";
+                                document.body.style.backgroundColor = '#2a2a2a';
+                                document.body.style.color = 'white';
+                                document.body.innerHTML = "<h1>test</h1>";
                     """
                         );
                     });
 
                     window.scheduleTask(() -> {
-                        System.out.println("[UI Thread] Running JS 2 (postMessage)");
-                        webView.runJavaScript(webViewHandle,
-                                "window.webkit.messageHandlers.kona.postMessage('Hello from JavaScript!');"
-                        );
+                        System.out.println("[UI Thread] Running JS 3 (test test)");
+
+                        String jsMessage = """
+                            const msg = {
+                                controller: 'test',
+                                action: 'test',
+                                payload: { message: "Hello from Kona front" }
+                            };
+                            window.webkit.messageHandlers.kona.postMessage(JSON.stringify(msg));
+                        """;
+                        webView.runJavaScript(webViewHandle, jsMessage);
                     });
 
                 } catch (InterruptedException e) {

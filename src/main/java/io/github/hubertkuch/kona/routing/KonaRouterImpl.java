@@ -1,9 +1,13 @@
 package io.github.hubertkuch.kona.routing;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import io.github.hubertkuch.kona.message.KonaController;
 import io.github.hubertkuch.kona.message.MessageHandler;
+import io.github.hubertkuch.kona.message.Payload;
 import org.reflections.Reflections;
 
 import java.lang.reflect.Method;
@@ -17,7 +21,7 @@ public class KonaRouterImpl implements KonaRouter {
     private final Gson gson = new Gson();
     private final Type messageType = new TypeToken<Map<String, String>>() {}.getType();
 
-    private record HandlerTarget(Object instance, Method method) {}
+    private record HandlerTarget(Object instance, Method method, Class<?> payloadType) {}
     private final Map<String, Map<String, HandlerTarget>> routes = new HashMap<>();
 
     public KonaRouterImpl() {
@@ -41,11 +45,19 @@ public class KonaRouterImpl implements KonaRouter {
                         MessageHandler handlerAnnotation = method.getAnnotation(MessageHandler.class);
                         String actionName = handlerAnnotation.action();
 
-                        if (method.getParameterCount() > 1) {
-                            System.err.println("WARNING: @MessageHandler " + actionName + " has > 1 param. Only one (String payload) is supported.");
+                        Class<?> payloadType = null;
+                        if (method.getParameterCount() == 1) {
+                            payloadType = method.getParameterTypes()[0];
+                            if (! Payload.class.isAssignableFrom(payloadType)) {
+                                System.err.println("WARNING: Payload type " + payloadType.getName() +
+                                        " does not implement Payload interface.");
+                            }
+                        } else if (method.getParameterCount() > 1) {
+                            System.err.println("WARNING: @MessageHandler " + actionName +
+                                    " has > 1 param. Only one (Payload object) or zero params are supported.");
                         }
 
-                        actionMap.put(actionName, new HandlerTarget(controllerInstance, method));
+                        actionMap.put(actionName, new HandlerTarget(controllerInstance, method, payloadType));
                         System.out.println("  -> Registered: " + controllerName + " -> " + actionName);
                     }
                 }
@@ -61,10 +73,15 @@ public class KonaRouterImpl implements KonaRouter {
     @Override
     public void onMessage(String message) {
         try {
-            Map<String, String> messageData = gson.fromJson(message, messageType);
-            String controllerName = messageData.get("controller");
-            String actionName = messageData.get("action");
-            String payload = messageData.get("payload");
+            // 1. Parse the whole message into a generic JSON object
+            JsonObject messageObject = JsonParser.parseString(message).getAsJsonObject();
+
+            // 2. Get controller and action as strings
+            String controllerName = messageObject.get("controller").getAsString();
+            String actionName = messageObject.get("action").getAsString();
+
+            // 3. Get the payload as a JsonElement
+            JsonElement payloadElement = messageObject.get("payload");
 
             if (controllerName == null || actionName == null) {
                 System.err.println("[KonaRouter] Invalid message: 'controller' or 'action' missing.");
@@ -83,9 +100,18 @@ public class KonaRouterImpl implements KonaRouter {
                 return;
             }
 
-            if (target.method().getParameterCount() == 1) {
-                target.method().invoke(target.instance(), payload);
+            // 4. NEW INVOCATION LOGIC
+            if (target.payloadType() != null) {
+                // Method expects a payload object.
+                if (payloadElement == null || payloadElement.isJsonNull()) {
+                    System.err.println("[KonaRouter] Action " + actionName + " expected a payload, but got null.");
+                    return;
+                }
+                // Deserialize directly from the JsonElement into the target class
+                Object payloadObject = gson.fromJson(payloadElement, target.payloadType());
+                target.method().invoke(target.instance(), payloadObject);
             } else {
+                // Method expects no parameters
                 target.method().invoke(target.instance());
             }
 
