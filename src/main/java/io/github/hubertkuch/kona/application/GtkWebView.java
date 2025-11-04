@@ -38,7 +38,7 @@ public class GtkWebView implements AutoCloseable, WebView {
 
 
     public static boolean isSupported() {
-        try (Arena checkArena = Arena.ofConfined()) {
+        try (Arena checkArena = Arena.ofShared()) {
             SymbolLookup.libraryLookup("libwebkit2gtk-4.0.so", checkArena);
             SymbolLookup.libraryLookup("libgobject-2.0.so", checkArena);
             SymbolLookup.libraryLookup("libjavascriptcoregtk-4.0.so", checkArena);
@@ -240,6 +240,7 @@ public class GtkWebView implements AutoCloseable, WebView {
     public void close() {
         if (this.arena != null && this.arena.scope().isAlive()) {
             this.arena.close();
+            this.arena = null;
         }
     }
 }

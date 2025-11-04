@@ -36,6 +36,9 @@ public class KonaRouterImpl implements KonaRouter {
         Set<Class<?>> controllerClasses = reflections.getTypesAnnotatedWith(KonaController.class);
 
         log.info("[KonaRouter] Scanning {}...", packageName);
+        if (controllerClasses.isEmpty()) {
+            log.warn("[KonaRouter] No @KonaController classes found in package: {}", packageName);
+        }
         for (Class<?> controllerClass : controllerClasses) {
             try {
                 KonaController controllerAnnotation = controllerClass.getAnnotation(KonaController.class);

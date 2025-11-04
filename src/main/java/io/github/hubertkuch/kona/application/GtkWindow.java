@@ -71,7 +71,8 @@ public class GtkWindow implements AppWindow, AutoCloseable {
      * This is the Java method called *by C* (via g_idle_add) to run tasks from the queue.
      * It MUST match the C callback signature: (gpointer user_data)
      *
-     * @return 0 (G_SOURCE_REMOVE) to ensure the callback only runs once per schedule.
+     * @return 0 (G_SOURCE_REMOVE) to ensure the callback is removed after running.
+     * It will be re-added if more tasks are scheduled.
      */
     public int onIdleCallback(MemorySegment userData) {
         Runnable task = taskQueue.poll();
@@ -242,6 +243,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     public void close() {
         if (this.arena != null && this.arena.scope().isAlive()) {
             this.arena.close();
+            this.arena = null;
         }
     }
 }

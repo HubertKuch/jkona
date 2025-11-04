@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 public class byhand {
 
     private static final Logger log = LoggerFactory.getLogger(byhand.class);
+    private static final String CONTROLLER_PACKAGE = "io.github.hubertkuch.kona";
+    private static final String BLANK_PAGE_URI = "about:blank";
 
     @KonaController(name = "test")
     public static class TestController {
@@ -39,14 +41,14 @@ public class byhand {
 
             var router = new KonaRouterImpl();
 
-            router.registerPackage("io.github.hubertkuch.kona");
+            router.registerPackage(CONTROLLER_PACKAGE);
             webView.setScriptMessageHandler(router);
 
             var handle = window.createWindow("Test window", 800, 400);
             long webViewHandle = webView.createWebViewWidget();
 
             window.addWidget(handle, webViewHandle);
-            webView.loadUri(webViewHandle, "about:blank");
+            webView.loadUri(webViewHandle, BLANK_PAGE_URI);
             window.showWindow(handle);
 
             Thread.ofVirtual().start(() -> {
