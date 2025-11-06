@@ -19,6 +19,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * The default implementation of the {@link KonaRouter} interface.
+ * This class is responsible for scanning for {@link KonaController} annotations,
+ * routing incoming messages to the appropriate {@link MessageHandler} methods,
+ * and sending back responses to the frontend.
+ */
 public class KonaRouterImpl implements KonaRouter {
 
     private static final Logger log = LoggerFactory.getLogger(KonaRouterImpl.class);
@@ -30,6 +36,13 @@ public class KonaRouterImpl implements KonaRouter {
     private record HandlerTarget(Object instance, Method method, Class<?> payloadType) {}
     private final Map<String, Map<String, HandlerTarget>> routes = new HashMap<>();
 
+    /**
+     * Constructs a new KonaRouterImpl.
+     *
+     * @param window        The main application window, used for scheduling tasks on the UI thread.
+     * @param webView       The WebView instance, used for running JavaScript.
+     * @param webViewHandle The native handle of the WebView widget.
+     */
     public KonaRouterImpl(GtkWindow window, WebView webView, long webViewHandle) {
         this.window = window;
         this.webView = webView;
@@ -37,6 +50,12 @@ public class KonaRouterImpl implements KonaRouter {
         log.info("[KonaRouter] Initialized.");
     }
 
+    /**
+     * Scans the specified package for classes annotated with {@link KonaController}
+     * and registers them as message handlers.
+     *
+     * @param packageName The name of the package to scan (e.g., "com.example.controllers").
+     */
     public void registerPackage(String packageName) {
         Reflections reflections = new Reflections(packageName);
         Set<Class<?>> controllerClasses = reflections.getTypesAnnotatedWith(KonaController.class);
@@ -79,6 +98,24 @@ public class KonaRouterImpl implements KonaRouter {
         }
     }
 
+    /**
+     * The main entry point for messages coming from the frontend. This method is called by the
+     * {@link GtkWebView} when a script message is received.
+     * <p>
+     * It parses the JSON message, identifies the target controller and action, deserializes the payload,
+     * invokes the appropriate handler method, and sends back a response if a callback ID is provided.
+     *
+     * @param message The raw JSON message string from the frontend.
+     *                The expected format is:
+     *                <pre>{@code
+     *                {
+     *                  "controller": "controllerName",
+     *                  "action": "actionName",
+     *                  "payload": { ... },
+     *                  "callbackId": "uniqueId"
+     *                }
+     *                }</pre>
+     */
     @Override
     public void onMessage(String message) {
         try {

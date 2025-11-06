@@ -3,13 +3,13 @@ import kona from "kona-js"
 import {useState} from "react"
 
 function App() {
-	const [message, setMessage] = useState();
+	const [message, setMessage] = useState("");
 	return (
 		<>
 			<p>Message: {message}</p>
 
 			<button onClick={async () => {
-				const response = await kona.call("test", "test", {
+				const response: { response: string } = await kona.call("test", "test", {
 					message: "Hello from React!"
 				});
 

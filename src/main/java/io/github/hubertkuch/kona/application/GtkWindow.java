@@ -10,8 +10,11 @@ import java.lang.invoke.MethodType;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * Linux window strategy implementation using GTK 3 and Project Panama.
- * This class must be closed (e.g., via try-with-resources) to free native resources.
+ * A Linux-specific implementation of {@link AppWindow} that uses GTK 3 for creating and managing the application window.
+ * This class leverages the Foreign Function & Memory API (Project Panama) to interact with the native GTK libraries.
+ * <p>
+ * It handles window creation, the main event loop, and provides a mechanism for scheduling tasks to run on the main GTK thread.
+ * This class must be closed (e.g., via try-with-resources) to free the native resources it allocates.
  */
 public class GtkWindow implements AppWindow, AutoCloseable {
 
@@ -40,8 +43,9 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     private MemorySegment idleCallbackStub;
 
     /**
-     * Checks if this strategy can be used on the current system.
-     * @return true if GTK 3 library is found, false otherwise.
+     * Checks if the required native libraries for this windowing implementation are available.
+     *
+     * @return {@code true} if both GTK3 and GObject libraries are found, {@code false} otherwise.
      */
     public static boolean isSupported() {
         try (Arena checkArena = Arena.ofShared()) {
@@ -55,8 +59,15 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     }
 
     /**
-     * This is the Java method that will be called *by C* when the window is destroyed.
-     * It MUST match the C callback signature: (GtkWidget* widget, gpointer user_data)
+     * Callback method invoked from native code when the GTK window is destroyed (e.g., by closing it).
+     * This method is an upcall from C, triggered by the "destroy" signal of the GtkWindow.
+     * Its primary role is to terminate the GTK main event loop.
+     * <p>
+     * The method signature MUST match the one expected by the GCallback for the "destroy" signal:
+     * {@code (GtkWidget *widget, gpointer user_data)}.
+     *
+     * @param widget   A pointer to the GtkWidget that emitted the signal (the window).
+     * @param userData User data passed to the signal connection (in this case, a pointer to this GtkWindow instance).
      */
     public void onWindowDestroyed(MemorySegment widget, MemorySegment userData) {
         log.info("===> UPCALL: Window is closing! Quitting main loop.");
@@ -68,11 +79,14 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     }
 
     /**
-     * This is the Java method called *by C* (via g_idle_add) to run tasks from the queue.
-     * It MUST match the C callback signature: (gpointer user_data)
+     * Callback method invoked from native code via {@code g_idle_add} to process tasks from the queue.
+     * This method runs on the main GTK thread when the event loop is idle.
+     * <p>
+     * The method signature MUST match the one expected by GLib's GSourceFunc: {@code (gpointer user_data)}.
      *
-     * @return 0 (G_SOURCE_REMOVE) to ensure the callback is removed after running.
-     * It will be re-added if more tasks are scheduled.
+     * @param userData User data passed to the callback (not used here).
+     * @return {@code 0} (G_SOURCE_REMOVE) to ensure the idle source is automatically removed after execution.
+     *         A new idle source will be added if more tasks are scheduled.
      */
     public int onIdleCallback(MemorySegment userData) {
         Runnable task = taskQueue.poll();
@@ -213,10 +227,11 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     }
 
     /**
-     * Schedules a task to be run on the main GTK thread.
-     * This method IS thread-safe.
+     * Schedules a task to be run on the main GTK event loop thread (the "UI thread").
+     * This is the safe way to interact with GTK widgets from other threads.
+     * The task is added to a queue and processed during the GTK idle phase.
      *
-     * @param task The task to execute.
+     * @param task The {@link Runnable} task to execute on the GTK main thread.
      */
     public void scheduleTask(Runnable task) {
         taskQueue.offer(task);

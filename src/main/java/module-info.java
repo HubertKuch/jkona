@@ -1,4 +1,8 @@
 
+/**
+ * The main module for the Kona application framework.
+ * This module declares the dependencies and exports the public packages.
+ */
 module kona.main {
     requires org.slf4j;
     requires com.google.gson;
