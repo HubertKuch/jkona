@@ -5,7 +5,7 @@ package io.github.hubertkuch.kona.application;
  * This interface abstracts the underlying windowing system, providing a common
  * set of functionalities for window initialization, creation, display, and event handling.
  */
-public interface AppWindow {
+public interface AppWindow extends AutoCloseable {
 
     /**
      * Initializes the native windowing system and prepares any required resources.
@@ -47,4 +47,7 @@ public interface AppWindow {
      * @param widgetHandle The native handle of the widget to be added.
      */
     void addWidget(long windowHandle, long widgetHandle);
+
+    void scheduleTask(Runnable task);
+    void close();
 }

@@ -21,7 +21,7 @@ The project is divided into several key packages:
 1.  **Create a new controller**: Create a new class and annotate it with `@KonaController`. This class will be responsible for handling a specific set of messages from the frontend.
 2.  **Create message handlers**: Within your controller, create methods and annotate them with `@MessageHandler`. These methods will be invoked when a message with a matching action is received.
 3.  **Define payloads**: Create classes that implement the `Payload` interface to represent the data that is sent between the frontend and the backend.
-4.  **Register your controllers**: In your main application class, use the `KonaRouter` to register the package that contains your controllers.
+4.  **Run the application**: Use the `Kona.Builder` to configure and run your application.
 
 For more detailed information, refer to the other documents in this directory:
 

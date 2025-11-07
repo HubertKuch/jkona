@@ -21,37 +21,17 @@ You can add widgets (e.g., a `WebView`) to a window using the `addWidget(long wi
 ## Example
 
 ```java
-// Get an instance of AppWindow
-AppWindow window = new GtkWindow();
-
-// Initialize the windowing system
-if (!window.initialize()) {
-    throw new RuntimeException("Cannot initialize window");
+public class Main {
+    public static void main(String[] args) {
+        // The application will automatically detect the environment.
+        // If /webapp/index.html is found, it will run in production mode.
+        // Otherwise, it will fall back to development mode and load from http://localhost:5173.
+        new Kona.Builder()
+                .title("My App")
+                .width(800)
+                .height(600)
+                .build()
+                .run();
+    }
 }
-
-// Create a window
-long windowHandle = window.createWindow("My App", 800, 600);
-
-// Get an instance of WebView
-WebView webView = new GtkWebView();
-
-// Initialize the web view
-if (!webView.initialize()) {
-    throw new RuntimeException("Cannot initialize web view");
-}
-
-// Create a web view widget
-long webViewHandle = webView.createWebViewWidget();
-
-// Add the web view to the window
-window.addWidget(windowHandle, webViewHandle);
-
-// Load a URI
-webView.loadUri(webViewHandle, "https://example.com");
-
-// Show the window
-window.showWindow(windowHandle);
-
-// Start the event loop
-window.runEventLoop();
 ```

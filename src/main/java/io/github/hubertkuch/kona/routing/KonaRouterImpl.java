@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.hubertkuch.kona.application.AppWindow;
 import io.github.hubertkuch.kona.message.KonaController;
 import io.github.hubertkuch.kona.message.MessageHandler;
 import io.github.hubertkuch.kona.message.Payload;
@@ -29,7 +30,7 @@ public class KonaRouterImpl implements KonaRouter {
 
     private static final Logger log = LoggerFactory.getLogger(KonaRouterImpl.class);
     private final Gson gson = new Gson();
-    private final GtkWindow window;
+    private final AppWindow window;
     private final WebView webView;
     private final long webViewHandle;
 
@@ -43,7 +44,7 @@ public class KonaRouterImpl implements KonaRouter {
      * @param webView       The WebView instance, used for running JavaScript.
      * @param webViewHandle The native handle of the WebView widget.
      */
-    public KonaRouterImpl(GtkWindow window, WebView webView, long webViewHandle) {
+    public KonaRouterImpl(AppWindow window, WebView webView, long webViewHandle) {
         this.window = window;
         this.webView = webView;
         this.webViewHandle = webViewHandle;
@@ -100,7 +101,7 @@ public class KonaRouterImpl implements KonaRouter {
 
     /**
      * The main entry point for messages coming from the frontend. This method is called by the
-     * {@link GtkWebView} when a script message is received.
+     * {@link AppWindow} when a script message is received.
      * <p>
      * It parses the JSON message, identifies the target controller and action, deserializes the payload,
      * invokes the appropriate handler method, and sends back a response if a callback ID is provided.

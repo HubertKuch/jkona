@@ -78,9 +78,11 @@ public record GetUserPayload(String userId) implements Payload {}
 
 ### `KonaRouter`
 
-The `KonaRouter` is responsible for routing messages to the appropriate handlers. You need to register your controller packages with the router in your main application class.
+The `KonaRouter` is responsible for routing messages to the appropriate handlers. The `Kona` class automatically creates and configures the router for you. By default, it scans the package of the class that calls the `Kona.Builder` for controllers. You can also specify a different package using the `controllerPackage` method on the builder.
 
 ```java
-var router = new KonaRouterImpl(window, webView, webViewHandle);
-router.registerPackage("io.github.hubertkuch.kona.controllers");
+new Kona.Builder()
+        .controllerPackage("com.example.controllers")
+        .build()
+        .run();
 ```
