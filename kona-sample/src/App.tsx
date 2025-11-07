@@ -9,7 +9,7 @@ function App() {
 			<p>Message: {message}</p>
 
 			<button onClick={async () => {
-				const response: { response: string } = await kona.call("test", "test", {
+				const response = await kona.call("test", "test", {
 					message: "Hello from React!"
 				});
 
