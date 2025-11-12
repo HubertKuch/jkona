@@ -15,16 +15,15 @@ public class byhand {
         // The application will automatically detect the environment.
         // If /webapp/index.html is found, it will run in production mode.
         // Otherwise, it will fall back to development mode and load from http://localhost:5173.
-
         new Kona.Builder()
                 .title("My Kona App")
+                .fullscreen(true)
                 .build()
                 .run();
 
     }
 
     @KonaController(name = "test")
-
     public static class TestController {
 
         public TestController() {}

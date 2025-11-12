@@ -41,6 +41,9 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     private MethodHandle gIdleAdd;
     private MemorySegment onWindowDestroyStub;
     private MemorySegment idleCallbackStub;
+    private MethodHandle gtkWindowUnfullscreen;
+    private MethodHandle gtkWindowSetResizable;
+    private MethodHandle gtkWindowFullscreen;
 
     /**
      * Checks if the required native libraries for this windowing implementation are available.
@@ -149,6 +152,21 @@ public class GtkWindow implements AppWindow, AutoCloseable {
                     .find("g_idle_add")
                     .get(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
 
+            gtkWindowSetResizable = linker.downcallHandle(
+                    gtkLib.find("gtk_window_set_resizable").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_BOOLEAN)
+            );
+
+            gtkWindowFullscreen = linker.downcallHandle(
+                    gtkLib.find("gtk_window_fullscreen").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
+            );
+
+            gtkWindowUnfullscreen = linker.downcallHandle(
+                    gtkLib.find("gtk_window_unfullscreen").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
+            );
+
             MethodHandle destroyHandle = MethodHandles
                     .lookup()
                     .findVirtual(GtkWindow.class, "onWindowDestroyed",
@@ -214,23 +232,25 @@ public class GtkWindow implements AppWindow, AutoCloseable {
 
     @Override
     public void fullscreen(long windowHandle, boolean fullscreen) {
-        try {
-            MemorySegment window = MemorySegment.ofAddress(windowHandle);
-
-            if (fullscreen) {
-                linker.downcallHandle(
-                        gtkLib.find("gtk_window_fullscreen").get(),
-                        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
-                ).invoke(window);
-            } else {
-                linker.downcallHandle(
-                        gtkLib.find("gtk_window_unfullscreen").get(),
-                        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
-                ).invoke(window);
-            }
-        } catch (Throwable e) {
-            log.error("Fullscreen method error:", e);
+        if (windowHandle == 0L)
+        {
+            throw new IllegalArgumentException("Invalid window handle");
         }
+
+        scheduleTask(() -> {
+            try {
+                log.info("Setting fullscreen");
+                MemorySegment window = MemorySegment.ofAddress(windowHandle);
+
+                if (fullscreen) {
+                    gtkWindowFullscreen.invokeExact(window);
+                } else {
+                    gtkWindowUnfullscreen.invokeExact(window);
+                }
+            } catch (Throwable e) {
+                log.error("Error setting fullscreen state:", e);
+            }
+        });
     }
 
     @Override
