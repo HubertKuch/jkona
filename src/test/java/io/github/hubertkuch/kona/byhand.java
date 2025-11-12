@@ -18,6 +18,8 @@ public class byhand {
         new Kona.Builder()
                 .title("My Kona App")
                 .fullscreen(true)
+                .resizable(false)
+                .modal(false)
                 .build()
                 .run();
 

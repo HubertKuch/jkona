@@ -44,6 +44,7 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     private MethodHandle gtkWindowUnfullscreen;
     private MethodHandle gtkWindowSetResizable;
     private MethodHandle gtkWindowFullscreen;
+    private MethodHandle gtkWindowSetModal;
 
     /**
      * Checks if the required native libraries for this windowing implementation are available.
@@ -167,6 +168,11 @@ public class GtkWindow implements AppWindow, AutoCloseable {
                     FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
             );
 
+            gtkWindowSetModal = linker.downcallHandle(
+                    gtkLib.find("gtk_window_set_modal").get(),
+                    FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
+            );
+
             MethodHandle destroyHandle = MethodHandles
                     .lookup()
                     .findVirtual(GtkWindow.class, "onWindowDestroyed",
@@ -254,8 +260,21 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     }
 
     @Override
-    public void resizable(long windowHandle, boolean fullscreen) {
+    public void resizable(long windowHandle, boolean resizable) {
+        if (windowHandle == 0L)
+        {
+            throw new IllegalArgumentException("Invalid window handle");
+        }
 
+        scheduleTask(() -> {
+            try {
+                MemorySegment window = MemorySegment.ofAddress(windowHandle);
+
+                gtkWindowSetResizable.invokeExact(window, resizable);
+            } catch (Throwable e) {
+                log.error("Error setting resizable state:", e);
+            }
+        });
     }
 
     @Override
@@ -265,7 +284,20 @@ public class GtkWindow implements AppWindow, AutoCloseable {
 
     @Override
     public void modal(long windowHandle, boolean modal) {
+        if (windowHandle == 0L)
+        {
+            throw new IllegalArgumentException("Invalid window handle");
+        }
 
+        scheduleTask(() -> {
+            try {
+                MemorySegment window = MemorySegment.ofAddress(windowHandle);
+
+                gtkWindowSetModal.invokeExact(window, modal ? 1 : 0);
+            } catch (Throwable e) {
+                log.error("Error setting modal state:", e);
+            }
+        });
     }
 
     @Override

@@ -1,5 +1,6 @@
 package io.github.hubertkuch.kona;
 
+import io.github.hubertkuch.kona.application.AppWindow;
 import io.github.hubertkuch.kona.application.GtkWebView;
 import io.github.hubertkuch.kona.application.GtkWindow;
 import io.github.hubertkuch.kona.platform.Platform;
@@ -91,6 +92,8 @@ public class Kona {
             webView.loadUri(webViewHandle, initialUri);
             window.showWindow(handle);
             window.fullscreen(handle, builder.fullscreen);
+            window.resizable(handle, builder.fullscreen);
+            window.modal(handle, builder.fullscreen);
 
             log.info("[Kona] Starting GTK event loop (blocking)...");
             window.runEventLoop();
@@ -109,6 +112,8 @@ public class Kona {
         private int width = 800;
         private int height = 600;
         private boolean fullscreen;
+        private boolean modal;
+        private boolean resizable;
 
         /**
          * Creates a new builder for a Kona application.
@@ -179,6 +184,18 @@ public class Kona {
          */
         public Builder fullscreen(boolean fullscreen) {
             this.fullscreen = fullscreen;
+            return this;
+        }
+
+        public Builder resizable(boolean b) {
+            this.resizable = b;
+
+            return this;
+        }
+
+        public Builder modal(boolean b) {
+            this.modal = b;
+
             return this;
         }
 
