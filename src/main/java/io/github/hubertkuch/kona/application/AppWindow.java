@@ -48,6 +48,11 @@ public interface AppWindow extends AutoCloseable {
      */
     void addWidget(long windowHandle, long widgetHandle);
 
+    void fullscreen(long windowHandle, boolean fullscreen);
+    void resizable(long windowHandle, boolean fullscreen);
+    void title(long windowHandle, String title);
+    void modal(long windowHandle, boolean modal);
+
     void scheduleTask(Runnable task);
     void close();
 }

@@ -21,6 +21,7 @@ public class Kona {
     private final String title;
     private final int width;
     private final int height;
+    private final Builder  builder;
 
     private Kona(Builder builder) {
         this.controllerPackage = builder.controllerPackage != null ? builder.controllerPackage : getCallerPackage();
@@ -28,6 +29,7 @@ public class Kona {
         this.title = builder.title;
         this.width = builder.width;
         this.height = builder.height;
+        this.builder = builder;
     }
 
     private String getCallerPackage() {
@@ -67,7 +69,7 @@ public class Kona {
      * and starts the GTK event loop.
      */
     public void run() {
-        if (! Platform.isWebViewSupported() || !Platform.isWindowSupported()) {
+        if (! Platform.isWebViewSupported()) {
             throw new RuntimeException(Platform.getUnsupportedMessage());
         }
 
@@ -88,6 +90,7 @@ public class Kona {
             window.addWidget(handle, webViewHandle);
             webView.loadUri(webViewHandle, initialUri);
             window.showWindow(handle);
+            window.fullscreen(handle, builder.fullscreen);
 
             log.info("[Kona] Starting GTK event loop (blocking)...");
             window.runEventLoop();
@@ -105,6 +108,7 @@ public class Kona {
         private String title = "Kona App";
         private int width = 800;
         private int height = 600;
+        private boolean fullscreen;
 
         /**
          * Creates a new builder for a Kona application.
@@ -165,6 +169,16 @@ public class Kona {
          */
         public Builder height(int height) {
             this.height = height;
+            return this;
+        }
+
+        /**
+         * Sets the fullscreen of window
+         *
+         * @return This builder instance.
+         */
+        public Builder fullscreen(boolean fullscreen) {
+            this.fullscreen = fullscreen;
             return this;
         }
 

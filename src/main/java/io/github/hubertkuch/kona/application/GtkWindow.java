@@ -213,6 +213,42 @@ public class GtkWindow implements AppWindow, AutoCloseable {
     }
 
     @Override
+    public void fullscreen(long windowHandle, boolean fullscreen) {
+        try {
+            MemorySegment window = MemorySegment.ofAddress(windowHandle);
+
+            if (fullscreen) {
+                linker.downcallHandle(
+                        gtkLib.find("gtk_window_fullscreen").get(),
+                        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
+                ).invoke(window);
+            } else {
+                linker.downcallHandle(
+                        gtkLib.find("gtk_window_unfullscreen").get(),
+                        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
+                ).invoke(window);
+            }
+        } catch (Throwable e) {
+            log.error("Fullscreen method error:", e);
+        }
+    }
+
+    @Override
+    public void resizable(long windowHandle, boolean fullscreen) {
+
+    }
+
+    @Override
+    public void title(long windowHandle, String title) {
+
+    }
+
+    @Override
+    public void modal(long windowHandle, boolean modal) {
+
+    }
+
+    @Override
     public void showWindow(long windowHandle) {
         if (windowHandle == 0L) {
             log.error("Cannot show window: invalid window handle.");
