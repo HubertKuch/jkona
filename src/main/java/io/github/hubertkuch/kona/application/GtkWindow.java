@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * A Linux-specific implementation of {@link AppWindow} that uses GTK 3 for creating and managing the application window.
- * This class leverages the Foreign Function & Memory API (Project Panama) to interact with the native GTK libraries.
+ * This class leverages the Foreign Function and Memory API (Project Panama) to interact with the native GTK libraries.
  * <p>
  * It handles window creation, the main event loop, and provides a mechanism for scheduling tasks to run on the main GTK thread.
  * This class must be closed (e.g., via try-with-resources) to free the native resources it allocates.

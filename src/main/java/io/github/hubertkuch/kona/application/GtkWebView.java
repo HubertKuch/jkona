@@ -13,7 +13,7 @@ import java.lang.invoke.MethodType;
  * A {@link WebView} implementation that uses GTK's WebKit port (WebKit2GTK).
  * This class is responsible for creating and managing a native WebView widget,
  * handling the bidirectional communication between Java and JavaScript, and loading web content.
- * It uses the Foreign Function & Memory API (Project Panama) to interact with native GTK and WebKit libraries.
+ * It uses the Foreign Function and Memory API (Project Panama) to interact with native GTK and WebKit libraries.
  * <p>
  * This implementation is designed to be used on Linux systems where GTK and WebKit2GTK are available.
  * It must be closed (e.g., via try-with-resources) to release the native resources allocated by the underlying libraries.
@@ -101,7 +101,7 @@ public class GtkWebView implements AutoCloseable, WebView {
 
     /**
      * Initializes the GtkWebView by loading the required native libraries (WebKit, GObject, etc.)
-     * and looking up the necessary function symbols using the Foreign Function & Memory API.
+     * and looking up the necessary function symbols using the Foreign Function and Memory API.
      * It also prepares the upcall stub for handling JavaScript messages.
      *
      * @return {@code true} if all libraries and functions are loaded successfully, {@code false} on any error.
