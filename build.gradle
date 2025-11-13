@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'maven-publish'
+    id "com.vanniktech.maven.publish" version "0.35.0"
 }
 
 group = 'io.github.hubertkuch'
@@ -11,32 +11,40 @@ repositories {
 }
 
 java {
-    withSourcesJar()
-    withJavadocJar()
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
 }
 
-publishing {
-    repositories {
-        maven {
-            name = "JKona"
-            description = "Kona is a lightweight framework for building cross-platform desktop native applications using Java and web technologies."
-            url = uri("https://maven.pkg.github.com/hubertkuch/jkona")
+mavenPublishing {
+    coordinates(project.group, project.name, version)
 
-            credentials {
-                username = project.properties["github.username"] as String
-                password = project.properties["github.token"] as String
+    pom {
+        name = "JKona"
+        description = "Java native desktop library"
+        inceptionYear = "2025"
+        url = "https://github.com/hubertkuch/jkona/"
+        licenses {
+            license {
+                name = "The Apache License, Version 2.0"
+                url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+                distribution = "http://www.apache.org/licenses/LICENSE-2.0.txt"
             }
         }
-    }
-
-    publications {
-        gpr(MavenPublication) {
-            from(components.java)
+        developers {
+            developer {
+                id = "hubertkuch"
+                name = "Hubert Kuch"
+                url = "https://github.com/hubertkuch/"
+            }
+        }
+        scm {
+            url = "https://github.com/hubertkuch/jkona/"
+            connection = "scm:git:git://github.com/hubertkuch/jkona.git"
+            developerConnection = "scm:git:ssh://git@github.com/hubertkuch/jkona.git"
         }
     }
 }
+
 
 dependencies {
     implementation 'com.google.auto.factory:auto-factory:1.1.0'
@@ -57,7 +65,13 @@ test {
     jvmArgs += "--enable-preview"
 }
 
+afterEvaluate {
+        tasks.named('generateMetadataFileForMavenPublication').configure {
+            dependsOn(tasks.plainJavadocJar)
+        }
+}
 
-tasks.withType(JavaCompile) {
-    options.compilerArgs += "--enable-preview"
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('--enable-preview')
 }
