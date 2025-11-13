@@ -1,0 +1,38 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Hello world! Provide your name</h1>
+    <label>
+        Your name
+        <input name="name" />
+    </label>
+    <button class="btn__msg">
+        Get data from Java!
+    </button>
+    <p>
+        Data from Java: <span id="data"></span>
+    </p>
+
+    <script async src="https://unpkg.com/kona-js@1.2.1/dist/browser.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const btn = document.querySelector(".btn__msg");
+
+
+            btn.addEventListener("click", async () => {
+                console.log(window.kona)
+
+                const response = await kona.call("my-controller", "my-action", {
+                    name: String(document.querySelector("input[name='name']").value)
+                });
+
+                document.querySelector("#data").textContent = response.data;
+            })
+        });
+    </script>
+</body>
+</html>
