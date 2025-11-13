@@ -92,8 +92,8 @@ public class Kona {
             webView.loadUri(webViewHandle, initialUri);
             window.showWindow(handle);
             window.fullscreen(handle, builder.fullscreen);
-            window.resizable(handle, builder.fullscreen);
-            window.modal(handle, builder.fullscreen);
+            window.resizable(handle, builder.resizable);
+            window.modal(handle, builder.modal);
 
             log.info("[Kona] Starting GTK event loop (blocking)...");
             window.runEventLoop();
