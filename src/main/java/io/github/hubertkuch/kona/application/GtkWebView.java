@@ -256,8 +256,11 @@ public class GtkWebView implements AutoCloseable, WebView {
             MemorySegment webView = (MemorySegment) webkitWebViewNew.invokeExact();
 
             MemorySegment settings = (MemorySegment) webkitWebViewGetSettings.invokeExact(webView);
-            MemorySegment propName = this.arena.allocateFrom("enable-developer-extras");
-            gObjectSet.invokeExact(settings, propName, true, MemorySegment.NULL);
+            MemorySegment enableDeveloperExtrasPropName = this.arena.allocateFrom("enable-developer-extras");
+            MemorySegment allowFileAccessFromFileUrlsPropName = this.arena.allocateFrom("allow-file-access-from-file-urls");
+
+            gObjectSet.invokeExact(settings, enableDeveloperExtrasPropName, true, MemorySegment.NULL);
+            gObjectSet.invokeExact(settings, allowFileAccessFromFileUrlsPropName, true, MemorySegment.NULL);
 
             MemorySegment contentManager = (MemorySegment) webkitWebViewGetUserContentManager.invokeExact(webView);
             MemorySegment handlerName = this.arena.allocateFrom("kona");
